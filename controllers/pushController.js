@@ -1,74 +1,54 @@
 const pushSubscriptions = require("../models/pushSubscriptionModel");
 const queues = require("../models/queuesModel");
 
-// Save customer push subscription
 exports.savePushSubscriptionController = async (req, res) => {
     try {
         const { token, subscription } = req.body;
 
-        // Validate input
-        if (!token || !subscription) {
-            return res.status(400).json({
-                success: false,
-                message: "Queue token and push subscription are required"
-            });
-        }
-
-        const { endpoint, expirationTime, keys } = subscription;
-
         if (
-            !endpoint ||
-            !keys?.p256dh ||
-            !keys?.auth
+            !token ||
+            !subscription?.endpoint ||
+            !subscription?.keys?.p256dh ||
+            !subscription?.keys?.auth
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid push subscription"
+                message: "Invalid subscription data"
             });
         }
 
-        // Find customer queue entry
-        const queueEntry = await queues.findOne({ token });
+        const queue = await queues.findOne({ token });
 
-        if (!queueEntry) {
+        if (!queue) {
             return res.status(404).json({
                 success: false,
-                message: "Customer queue entry not found"
+                message: "Queue entry not found"
             });
         }
 
-        // Save or update subscription
-        const savedSubscription = await pushSubscriptions.findOneAndUpdate(
-            { endpoint },
+        await pushSubscriptions.findOneAndUpdate(
+            { endpoint: subscription.endpoint },
             {
-                queue: queueEntry._id,
-                endpoint,
-                expirationTime,
-                keys: {
-                    p256dh: keys.p256dh,
-                    auth: keys.auth
-                }
+                queue: queue._id,
+                endpoint: subscription.endpoint,
+                expirationTime: subscription.expirationTime,
+                keys: subscription.keys
             },
             {
-                new: true,
                 upsert: true,
-                runValidators: true
+                new: true
             }
         );
 
-        return res.status(200).json({
+        res.status(200).json({
             success: true,
-            message: "Push subscription saved successfully",
-            subscriptionId: savedSubscription._id
+            message: "Push subscription saved"
         });
 
     } catch (error) {
-        console.log(error);
-
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Failed to save push subscription",
-            error: error.message
+            message: error.message
         });
     }
 };

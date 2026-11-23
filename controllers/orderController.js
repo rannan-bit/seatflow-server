@@ -211,51 +211,117 @@ exports.getCustomerOrdersController = async (req, res) => {
 };
 
 // 3. GET ALL ORDERS (Staff and Admin)
+// 3. GET ALL ORDERS (Staff and Admin)
 exports.getAllOrdersController = async (req, res) => {
     console.log("inside getAllOrdersController");
 
-    const { status, paymentStatus } = req.query;
+    const { status, paymentStatus, date } = req.query;
 
     try {
         const filter = {};
 
+        // Default to today's date in India timezone
+        const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Kolkata"
+        }).format(new Date());
+
+        const selectedDate = date || today;
+
+        // Validate date format
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid date format. Use YYYY-MM-DD"
+            });
+        }
+
+        // Validate actual calendar date
+        const [year, month, day] = selectedDate.split("-").map(Number);
+
+        const dateCheck = new Date(Date.UTC(year, month - 1, day));
+
+        if (
+            dateCheck.getUTCFullYear() !== year ||
+            dateCheck.getUTCMonth() !== month - 1 ||
+            dateCheck.getUTCDate() !== day
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid date"
+            });
+        }
+
+        // Start of selected day in India timezone
+        const startDate = new Date(
+            `${selectedDate}T00:00:00+05:30`
+        );
+
+        // Calculate the next day
+        const nextDay = new Date(
+            Date.UTC(year, month - 1, day + 1)
+        ).toISOString().slice(0, 10);
+
+        const endDate = new Date(
+            `${nextDay}T00:00:00+05:30`
+        );
+
+        // Filter orders by creation date
+        filter.createdAt = {
+            $gte: startDate,
+            $lt: endDate
+        };
+
+        // Filter by order status
         if (status !== undefined) {
             if (!ORDER_STATUSES.includes(status)) {
                 return res.status(400).json({
+                    success: false,
                     message: `Invalid status. Allowed values: ${ORDER_STATUSES.join(", ")}`
                 });
             }
+
             filter.status = status;
         }
 
+        // Filter by payment status
         if (paymentStatus !== undefined) {
             if (!PAYMENT_STATUSES.includes(paymentStatus)) {
                 return res.status(400).json({
+                    success: false,
                     message: `Invalid payment status. Allowed values: ${PAYMENT_STATUSES.join(", ")}`
                 });
             }
+
             filter.paymentStatus = paymentStatus;
         }
 
+        // Fetch orders
         const allOrders = await orders
             .find(filter)
             .sort({ createdAt: -1 })
             .populate([
-                { path: "queue", select: "customerName phone guests token status assignedTable" },
-                { path: "items.food", select: "name price category image" }
+                {
+                    path: "queue",
+                    select: "customerName phone guests token status assignedTable"
+                },
+                {
+                    path: "items.food",
+                    select: "name price category image"
+                }
             ]);
 
         return res.status(200).json(allOrders);
 
     } catch (error) {
         console.log(error);
+
         return res.status(500).json({
+            success: false,
             message: "Failed to fetch orders",
             error: error.message
         });
     }
 };
-
 // 4. UPDATE ORDER STATUS (Staff and Admin)
 exports.updateOrderStatusController = async (req, res) => {
     console.log("inside updateOrderStatusController");

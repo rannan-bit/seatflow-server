@@ -34,6 +34,11 @@ const foodSchema = new mongoose.Schema({
     available: {
         type: Boolean,
         default: true
+    },
+
+    isVeg: {
+        type: Boolean,
+        default: true
     }
 
 }, { timestamps: true });

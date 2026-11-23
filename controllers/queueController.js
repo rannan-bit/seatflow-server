@@ -67,18 +67,77 @@ exports.checkInController = async (req, res) => {
 exports.customerCheckInController = exports.checkInController;
 
 // GET ALL QUEUE ENTRIES (Admin and Staff)
+// GET ALL QUEUE ENTRIES (Admin and Staff)
 exports.getAllQueueController = async (req, res) => {
     console.log("inside getAllQueueController");
 
     try {
-        const { status } = req.query;
+        const { status, date } = req.query;
 
-        // Optionally filter by status (case-insensitive for flexibility)
-        const filter = status
-            ? { status: { $regex: new RegExp(`^${status}$`, "i") } }
-            : {};
+        // Get today's date in India timezone
+        const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Kolkata"
+        }).format(new Date());
 
-        // Sort customers by joining time (FIFO - First In, First Out)
+        // If date is not provided, use today's date
+        const selectedDate = date || today;
+
+        // Validate date format
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid date format. Use YYYY-MM-DD"
+            });
+        }
+
+        // Extract year, month and day
+        const [year, month, day] = selectedDate.split("-").map(Number);
+
+        // Validate actual calendar date
+        const dateCheck = new Date(Date.UTC(year, month - 1, day));
+
+        if (
+            dateCheck.getUTCFullYear() !== year ||
+            dateCheck.getUTCMonth() !== month - 1 ||
+            dateCheck.getUTCDate() !== day
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid date"
+            });
+        }
+
+        // Start of selected day (India timezone)
+        const startDate = new Date(
+            `${selectedDate}T00:00:00+05:30`
+        );
+
+        // Calculate the next day
+        const nextDay = new Date(
+            Date.UTC(year, month - 1, day + 1)
+        ).toISOString().slice(0, 10);
+
+        // Start of next day (exclusive)
+        const endDate = new Date(
+            `${nextDay}T00:00:00+05:30`
+        );
+
+        // Build MongoDB filter
+        const filter = {
+            joinedAt: {
+                $gte: startDate,
+                $lt: endDate
+            }
+        };
+
+        // Optional status filter
+        if (status) {
+            filter.status = {
+                $regex: new RegExp(`^${status}$`, "i")
+            };
+        }
+
+        // Fetch customers in FIFO order
         const allQueue = await queues
             .find(filter)
             .sort({ joinedAt: 1 })
@@ -88,6 +147,7 @@ exports.getAllQueueController = async (req, res) => {
 
     } catch (error) {
         console.log(error);
+
         return res.status(500).json({
             success: false,
             message: "Failed to fetch queue entries",
@@ -248,6 +308,37 @@ exports.assignTableController = async (req, res) => {
             });
         }
 
+        const subscription = await pushSubscriptions.findOne({
+            queue: updatedQueue._id
+        });
+
+        if (subscription) {
+
+            const payload = JSON.stringify({
+                title: "Your table is ready!",
+                body: `Hello ${updatedQueue.customerName}, Table ${lockedTable.tableNumber} has been assigned to you. Please proceed to your table.`,
+                url: `/customer/queue-status/${encodeURIComponent(updatedQueue.token)}`
+            });
+
+            try {
+
+                await webpush.sendNotification(
+                    subscription,
+                    payload
+                );
+
+                console.log("Push notification sent successfully");
+
+            } catch (error) {
+
+                console.error("Push notification failed:", error);
+
+                if (error.statusCode === 404 || error.statusCode === 410) {
+                    await pushSubscriptions.findByIdAndDelete(subscription._id);
+                }
+
+            }
+        }
         // 6. Send Web Push notification
         let notificationSent = false;
 
@@ -343,6 +434,8 @@ exports.assignTableController = async (req, res) => {
         });
     }
 };
+
+
 
 // UPDATE QUEUE STATUS CONTROLLER (Staff and Admin)
 exports.updateQueueStatusController = async (req, res) => {

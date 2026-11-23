@@ -24,7 +24,6 @@ const pushSubscriptionSchema = new mongoose.Schema({
             type: String,
             required: true
         },
-
         auth: {
             type: String,
             required: true
@@ -33,9 +32,7 @@ const pushSubscriptionSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-const pushSubscriptions = mongoose.model(
+module.exports = mongoose.model(
     "pushSubscriptions",
     pushSubscriptionSchema
 );
-
-module.exports = pushSubscriptions;

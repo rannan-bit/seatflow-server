@@ -8,6 +8,7 @@ const cors = require('cors')
 require('./config/db')
 //import router
 const router = require('./routes/router')
+const chatRoutes = require("./routes/chatRoutes");
 
 //create server
 const server = express()
@@ -17,8 +18,9 @@ server.use(cors())
 server.use(express.json())
 //use routes in server
 server.use(router)
+server.use("/api", chatRoutes)
 
-server.use('/uploads',express.static('./uploads'))
+server.use('/uploads', express.static('./uploads'))
 
 
 //setup port number to run server

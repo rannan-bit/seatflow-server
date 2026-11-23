@@ -8,7 +8,7 @@ exports.addFoodController = async (req, res) => {
 
     try {
 
-        const { name, description, price, category, available } = req.body;
+        const { name, description, price, category, available, isVeg } = req.body;
 
         // Step 1: Validate fields
         if (!name || !description || price === undefined || price === "" || !category) {
@@ -44,7 +44,8 @@ exports.addFoodController = async (req, res) => {
             category,
             image,
             // New dishes are available unless the admin explicitly says otherwise
-            available: available === undefined ? true : available === true || available === "true"
+            available: available === undefined ? true : available === true || available === "true",
+            isVeg: isVeg === undefined ? true : (isVeg === true || isVeg === "true")
         });
 
         // Step 4: Send response
@@ -122,7 +123,7 @@ exports.updateFoodController = async (req, res) => {
     console.log("inside updateFoodController");
 
     const { id } = req.params;
-    const { name, description, price, category, available, image } = req.body;
+    const { name, description, price, category, available, image, isVeg } = req.body;
 
     // Use newly uploaded image filename if available, otherwise retain existing image
     const updateImage = req.file ? req.file.filename : image;
@@ -153,6 +154,9 @@ exports.updateFoodController = async (req, res) => {
         if (updateImage !== undefined) updateData.image = updateImage;
         if (available !== undefined) {
             updateData.available = available === true || available === "true";
+        }
+        if (isVeg !== undefined) {
+            updateData.isVeg = isVeg === true || isVeg === "true";
         }
 
         const updatedFood = await foods.findByIdAndUpdate(
